@@ -45,6 +45,14 @@ export function getProjectName(projectDir) {
 }
 
 /**
+ * Directory name Claude uses for a project's transcripts under
+ * ~/.claude/projects (every non-alphanumeric character becomes "-").
+ */
+export function toClaudeProjectDirName(projectPath) {
+  return projectPath.replace(/[^A-Za-z0-9]/g, "-");
+}
+
+/**
  * Sandbox name. sbx allows letters, numbers, hyphens and periods only.
  */
 export function getSandboxName(projectDir) {

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { getClaudeHome, getClaudeJsonPath, toSandboxMountCandidates } from "./paths.js";
+import { getClaudeHome, getClaudeJsonPath, toSandboxMountCandidates, toClaudeProjectDirName } from "./paths.js";
 import { execInSandbox } from "./sbx.js";
 
 const AGENT_HOME = "/home/agent";
@@ -131,4 +131,19 @@ export function verifySandbox(sandboxName) {
     if (k && v) checks[k] = v.trim() === "ok";
   }
   return { checks, allOk: Object.values(checks).length > 0 && Object.values(checks).every(Boolean) };
+}
+
+/**
+ * Whether the sandbox has an interactive conversation for this project that
+ * `claude --continue` can pick up. Print-mode (-p) transcripts are recorded
+ * with entrypoint "sdk-cli" and are ignored by interactive --continue.
+ * Any failure counts as "no", so we start fresh rather than crash.
+ */
+export function hasContinuableConversation(sandboxName, projectDir) {
+  const dir = `${AGENT_CLAUDE}/projects/${toClaudeProjectDirName(projectDir)}`;
+  const { exitCode } = execInSandbox(
+    sandboxName,
+    `grep -lqsF '"entrypoint":"cli"' ${q(dir)}/*.jsonl`
+  );
+  return exitCode === 0;
 }

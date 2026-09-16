@@ -50,6 +50,17 @@ export function buildRunArgs(name, agentArgs = []) {
   return args;
 }
 
+/**
+ * Agent args when attaching to an existing sandbox. Interactive
+ * `claude --continue` exits with "No conversation found to continue" when the
+ * project has no prior interactive session, so only add it when one exists.
+ */
+export function buildAttachAgentArgs({ prompt = null, canContinue = false } = {}) {
+  const skipPerms = "--dangerously-skip-permissions";
+  if (prompt) return ["-p", prompt, skipPerms];
+  return canContinue ? ["--continue", skipPerms] : [skipPerms];
+}
+
 // ---------- availability ----------
 
 export function checkSbxAvailable() {

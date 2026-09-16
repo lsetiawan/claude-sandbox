@@ -13,9 +13,10 @@ import {
   runSandbox,
   stopSandbox,
   removeSandbox,
+  buildAttachAgentArgs,
 } from "./sbx.js";
 import { getClaudeHome, toHostPath, getSandboxName } from "./paths.js";
-import { setupHostConfig, verifySandbox, hostHasSkills } from "./config.js";
+import { setupHostConfig, verifySandbox, hostHasSkills, hasContinuableConversation } from "./config.js";
 import { checkPrerequisites } from "./prerequisites.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,6 +37,20 @@ const info = (msg) => console.log(`${CYAN}[claude-sandbox]${RESET} ${msg}`);
 // Claude args. sbx already adds --dangerously-skip-permissions when the first
 // agent arg is a flag; we pass it explicitly so the intent is visible.
 const SKIP_PERMS = "--dangerously-skip-permissions";
+
+/**
+ * Re-attach to an existing sandbox, continuing the last conversation when
+ * there is one. sbx mounts the project at the same path as on the host.
+ */
+function attach(sandbox, { projectDir, prompt = null } = {}) {
+  let canContinue = false;
+  if (!prompt) {
+    const dir = projectDir || (sandbox.workspaces?.[0] || "").replace(/:ro$/, "");
+    canContinue = !!dir && hasContinuableConversation(sandbox.name, dir);
+    if (!canContinue) info("No previous conversation in this sandbox. Starting a new one.");
+  }
+  return runSandbox(sandbox.name, buildAttachAgentArgs({ prompt, canContinue }));
+}
 
 function printHelp() {
   console.log(`
@@ -98,8 +113,7 @@ function cmdRun(opts) {
   if (existing) {
     info(`Sandbox exists (${existing.status}). Resuming...`);
     console.log();
-    const agentArgs = opts.prompt ? ["-p", opts.prompt, SKIP_PERMS] : ["--continue", SKIP_PERMS];
-    return runSandbox(sandboxName, agentArgs);
+    return attach(existing, { projectDir, prompt: opts.prompt });
   }
 
   const claudeHome = getClaudeHome();
@@ -193,12 +207,13 @@ function cmdResume(opts) {
     error("Specify sandbox name. Use 'claude-sandbox list' to see available.");
     process.exit(1);
   }
-  if (!getSandbox(name)) {
+  const sandbox = getSandbox(name);
+  if (!sandbox) {
     error(`No sandbox named '${name}'. Use 'claude-sandbox list' to see available.`);
     process.exit(1);
   }
   log(`Resuming: ${name}`);
-  return runSandbox(name, ["--continue", SKIP_PERMS]);
+  return attach(sandbox);
 }
 
 function cmdStatus() {

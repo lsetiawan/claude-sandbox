@@ -5,6 +5,7 @@ import {
   parseSecretList,
   buildCreateArgs,
   buildRunArgs,
+  buildAttachAgentArgs,
 } from "../src/sbx.js";
 
 const LS_JSON = JSON.stringify({
@@ -58,4 +59,11 @@ test("buildCreateArgs uses --name, agent, workspaces and skills flag", () => {
 test("buildRunArgs re-attaches by name and forwards agent args", () => {
   assert.deepEqual(buildRunArgs("n"), ["run", "--name", "n"]);
   assert.deepEqual(buildRunArgs("n", ["--continue"]), ["run", "--name", "n", "--", "--continue"]);
+});
+
+test("buildAttachAgentArgs continues only when a conversation exists", () => {
+  const skip = "--dangerously-skip-permissions";
+  assert.deepEqual(buildAttachAgentArgs({ canContinue: true }), ["--continue", skip]);
+  assert.deepEqual(buildAttachAgentArgs({ canContinue: false }), [skip]);
+  assert.deepEqual(buildAttachAgentArgs({ prompt: "hi", canContinue: true }), ["-p", "hi", skip]);
 });
