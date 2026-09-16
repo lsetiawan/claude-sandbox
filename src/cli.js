@@ -17,6 +17,7 @@ import {
 } from "./sbx.js";
 import { getClaudeHome, toHostPath, getSandboxName } from "./paths.js";
 import { setupHostConfig, verifySandbox, hostHasSkills, hasContinuableConversation } from "./config.js";
+import { listConversations } from "./sessions.js";
 import { checkPrerequisites } from "./prerequisites.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -38,18 +39,44 @@ const info = (msg) => console.log(`${CYAN}[claude-sandbox]${RESET} ${msg}`);
 // agent arg is a flag; we pass it explicitly so the intent is visible.
 const SKIP_PERMS = "--dangerously-skip-permissions";
 
+/** Project directory of a sandbox (its first workspace). */
+function projectDirOf(sandbox) {
+  return (sandbox.workspaces?.[0] || "").replace(/:ro$/, "");
+}
+
+/** Exit on conflicting conversation flags. */
+function checkConversationFlags(opts) {
+  if (opts.resume && opts.fresh) {
+    error("Use either --resume or --new, not both.");
+    process.exit(1);
+  }
+  if (opts.resume === true && opts.prompt) {
+    error("--prompt needs a session id with --resume. Use 'claude-sandbox sessions' to find one.");
+    process.exit(1);
+  }
+}
+
 /**
- * Re-attach to an existing sandbox, continuing the last conversation when
- * there is one. sbx mounts the project at the same path as on the host.
+ * Re-attach to an existing sandbox. By default this continues the last
+ * conversation when there is one; --resume and --new override that.
+ * sbx mounts the project at the same path as on the host.
  */
-function attach(sandbox, { projectDir, prompt = null } = {}) {
+function attach(sandbox, { projectDir, prompt = null, resume = null, fresh = false } = {}) {
   let canContinue = false;
-  if (!prompt) {
-    const dir = projectDir || (sandbox.workspaces?.[0] || "").replace(/:ro$/, "");
+  if (!prompt && !resume && !fresh) {
+    const dir = projectDir || projectDirOf(sandbox);
     canContinue = !!dir && hasContinuableConversation(sandbox.name, dir);
     if (!canContinue) info("No previous conversation in this sandbox. Starting a new one.");
   }
-  return runSandbox(sandbox.name, buildAttachAgentArgs({ prompt, canContinue }));
+  if (fresh) info("Starting a new conversation.");
+  return runSandbox(sandbox.name, buildAttachAgentArgs({ prompt, canContinue, resume, fresh }));
+}
+
+/** "2026-09-16 14:05" in local time. */
+function formatTime(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function printHelp() {
@@ -66,11 +93,14 @@ ${CYAN}Commands:${RESET}
   stop [name]            Stop a sandbox
   rm [name]              Remove a sandbox
   resume [name]          Resume an existing sandbox
+  sessions [name]        List past conversations in a sandbox
   status                 Show sbx, daemon, auth and config status
 
 ${CYAN}Options:${RESET}
   -p, --prompt <text>    Initial prompt for Claude (non-interactive, print mode)
   -n, --name <name>      Custom sandbox name
+  --resume [id]          Resume a past conversation (pick from a list, or by id)
+  --new                  Start a new conversation instead of continuing the last
   --no-config            Don't share host ~/.claude into the sandbox
   -v, --version          Show version
   -h, --help             Show this help
@@ -81,6 +111,10 @@ ${CYAN}Examples:${RESET}
   claude-sandbox . -p "improve test coverage" ${DIM}# with prompt${RESET}
   claude-sandbox list                         ${DIM}# show sandboxes${RESET}
   claude-sandbox resume my-sandbox            ${DIM}# resume existing${RESET}
+  claude-sandbox sessions                     ${DIM}# past conversations here${RESET}
+  claude-sandbox --resume                     ${DIM}# pick a conversation${RESET}
+  claude-sandbox --resume <id>                ${DIM}# resume that conversation${RESET}
+  claude-sandbox --new                        ${DIM}# fresh conversation${RESET}
 
 ${CYAN}How it works:${RESET}
   1. Creates a Docker Sandbox (microVM) for the project via 'sbx create'
@@ -101,6 +135,7 @@ ${CYAN}About history and data:${RESET}
 }
 
 function cmdRun(opts) {
+  checkConversationFlags(opts);
   const projectDir = toHostPath(opts.projectDir);
   const sandboxName = opts.name || getSandboxName(opts.projectDir);
 
@@ -113,7 +148,11 @@ function cmdRun(opts) {
   if (existing) {
     info(`Sandbox exists (${existing.status}). Resuming...`);
     console.log();
-    return attach(existing, { projectDir, prompt: opts.prompt });
+    return attach(existing, { projectDir, prompt: opts.prompt, resume: opts.resume, fresh: opts.fresh });
+  }
+
+  if (opts.resume) {
+    warn("New sandbox has no past conversations to resume. Starting a new one.");
   }
 
   const claudeHome = getClaudeHome();
@@ -202,6 +241,7 @@ function cmdRm(opts) {
 }
 
 function cmdResume(opts) {
+  checkConversationFlags(opts);
   const name = opts.extra[0];
   if (!name) {
     error("Specify sandbox name. Use 'claude-sandbox list' to see available.");
@@ -213,7 +253,34 @@ function cmdResume(opts) {
     process.exit(1);
   }
   log(`Resuming: ${name}`);
-  return attach(sandbox);
+  return attach(sandbox, { prompt: opts.prompt, resume: opts.resume, fresh: opts.fresh });
+}
+
+function cmdSessions(opts) {
+  const name = opts.extra[0] || opts.name || getSandboxName(".");
+  const sandbox = getSandbox(name);
+  if (!sandbox) {
+    error(`No sandbox named '${name}'. Use 'claude-sandbox list' to see available.`);
+    process.exit(1);
+  }
+  const sessions = listConversations(name, projectDirOf(sandbox));
+  if (sessions === null) {
+    error(`Could not read conversations from '${name}'.`);
+    process.exit(1);
+  }
+  if (sessions.length === 0) {
+    info(`No past conversations in ${name}.`);
+    return;
+  }
+
+  const width = Math.max(20, (process.stdout.columns || 100) - 58);
+  const clip = (t) => (t.length > width ? `${t.slice(0, width - 1)}…` : t);
+  console.log(`${"SESSION ID".padEnd(38)}${"LAST ACTIVE".padEnd(18)}TITLE`);
+  for (const s of sessions) {
+    console.log(`${s.id.padEnd(38)}${formatTime(s.modified).padEnd(18)}${clip(s.title)}`);
+  }
+  console.log();
+  console.log(`${DIM}Resume one with: claude-sandbox resume ${name} --resume <id>${RESET}`);
 }
 
 function cmdStatus() {
@@ -241,7 +308,7 @@ if (opts.help) {
 }
 
 // Commands that talk to sbx: quiet check, verbose guide only when broken.
-if (["run", "stop", "rm", "resume", "list"].includes(opts.command)) {
+if (["run", "stop", "rm", "resume", "sessions", "list"].includes(opts.command)) {
   const { ok } = checkPrerequisites({ interactive: !checkSbxAvailable() });
   if (!ok) {
     checkPrerequisites({ interactive: true });
@@ -265,6 +332,9 @@ switch (opts.command) {
     break;
   case "resume":
     status = cmdResume(opts);
+    break;
+  case "sessions":
+    cmdSessions(opts);
     break;
   case "status":
     cmdStatus();

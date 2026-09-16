@@ -54,7 +54,7 @@ Docker Sandboxes (`sbx`) already gives you a microVM per project and keeps your 
 | **No setup wizard** | `~/.claude.json` copied in so Claude starts with your theme and onboarding done. |
 | **Zero re-auth** | `sbx` stores your Anthropic OAuth token (or API key) on the host and injects it via its proxy. Log in once, use everywhere. |
 | **Any directory** | Point it at any project folder. Sandbox is named by directory and reused automatically. |
-| **Auto-resume** | Run `claude-sandbox` again in the same directory and it re-attaches with `--continue`. |
+| **Auto-resume** | Run `claude-sandbox` again in the same directory and it re-attaches with `--continue`. Use `--resume` or `--new` to pick another conversation or start fresh. |
 | **Writable workspace** | The project is mounted read-write at the same absolute path as on the host. |
 | **Smart prerequisites** | Missing `sbx`? Platform-specific install guide shown automatically. |
 | **No dependencies** | Pure Node.js. Zero npm dependencies. No Docker Desktop required. |
@@ -72,6 +72,21 @@ claude-sandbox . -p "analyze this codebase" # with a prompt (print mode)
 claude-sandbox -n my-custom-name            # custom sandbox name
 claude-sandbox --no-config                  # don't share host ~/.claude
 ```
+
+### Conversations
+
+Re-running `claude-sandbox` continues the last conversation. To pick a different one or start over:
+
+```bash
+claude-sandbox sessions                     # list past conversations in this dir's sandbox
+claude-sandbox sessions claude-sandbox-myapp  # ...or in a named sandbox
+claude-sandbox --resume                     # choose from Claude's conversation picker
+claude-sandbox --resume <session-id>        # resume a specific conversation
+claude-sandbox --new                        # start a new conversation
+claude-sandbox resume claude-sandbox-myapp --resume <session-id>  # same flags work with resume
+```
+
+`sessions` lists interactive conversations only; `-p` (print mode) runs aren't resumable from Claude's picker and are left out. `--resume <session-id>` also works with `-p` to send a prompt into that conversation.
 
 ### Managing sandboxes
 
@@ -333,7 +348,7 @@ Yes, once you `/login` inside a sandbox sbx stores the OAuth token on the host a
 Only files inside the mounted project directory. Your `~/.claude` is mounted read-only. Everything else is inaccessible.
 
 **Q: What happens when I close the terminal?**
-The sandbox stops but persists. Run `claude-sandbox` again in the same directory and it auto-resumes.
+The sandbox stops but persists. Run `claude-sandbox` again in the same directory and it auto-resumes. Use `claude-sandbox sessions` to see past conversations and `--resume <session-id>` to reopen one.
 
 **Q: Can I run multiple sandboxes?**
 Yes. Each project directory gets its own sandbox (`claude-sandbox-<dirname>`).

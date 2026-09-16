@@ -67,3 +67,12 @@ test("buildAttachAgentArgs continues only when a conversation exists", () => {
   assert.deepEqual(buildAttachAgentArgs({ canContinue: false }), [skip]);
   assert.deepEqual(buildAttachAgentArgs({ prompt: "hi", canContinue: true }), ["-p", "hi", skip]);
 });
+
+test("buildAttachAgentArgs honors --resume and --new", () => {
+  const skip = "--dangerously-skip-permissions";
+  const id = "87b16e09-94e8-4d0d-b963-899a9028fdd7";
+  assert.deepEqual(buildAttachAgentArgs({ resume: true }), ["--resume", skip]);
+  assert.deepEqual(buildAttachAgentArgs({ resume: id }), ["--resume", id, skip]);
+  assert.deepEqual(buildAttachAgentArgs({ resume: id, prompt: "hi" }), ["--resume", id, "-p", "hi", skip]);
+  assert.deepEqual(buildAttachAgentArgs({ fresh: true, canContinue: true }), [skip]);
+});

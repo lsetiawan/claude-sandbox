@@ -33,3 +33,30 @@ test("version and help", () => {
   assert.equal(parseArgs(argv("-v")).command, "version");
   assert.equal(parseArgs(argv("--help")).help, true);
 });
+
+test("--resume with and without a session id", () => {
+  const id = "87b16e09-94e8-4d0d-b963-899a9028fdd7";
+  assert.equal(parseArgs(argv()).resume, null);
+  assert.equal(parseArgs(argv("--resume")).resume, true);
+  assert.equal(parseArgs(argv("--resume", id)).resume, id);
+  assert.equal(parseArgs(argv(`--resume=${id}`)).resume, id);
+  assert.deepEqual(parseArgs(argv("resume", "box", "--resume", id)), {
+    ...parseArgs(argv("resume")),
+    resume: id,
+    extra: ["box"],
+  });
+});
+
+test("--resume does not swallow a project dir", () => {
+  const p = parseArgs(argv("--resume", "./proj"));
+  assert.equal(p.resume, true);
+  assert.equal(p.projectDir, "./proj");
+});
+
+test("--new and sessions command", () => {
+  assert.equal(parseArgs(argv()).fresh, false);
+  assert.equal(parseArgs(argv("--new")).fresh, true);
+  const p = parseArgs(argv("sessions", "box"));
+  assert.equal(p.command, "sessions");
+  assert.deepEqual(p.extra, ["box"]);
+});

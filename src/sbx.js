@@ -54,11 +54,17 @@ export function buildRunArgs(name, agentArgs = []) {
  * Agent args when attaching to an existing sandbox. Interactive
  * `claude --continue` exits with "No conversation found to continue" when the
  * project has no prior interactive session, so only add it when one exists.
+ *
+ * resume: true opens Claude's conversation picker, a string resumes that
+ * session id. fresh starts a new conversation. A prompt runs in print mode,
+ * inside the given session when resume is an id.
  */
-export function buildAttachAgentArgs({ prompt = null, canContinue = false } = {}) {
+export function buildAttachAgentArgs({ prompt = null, canContinue = false, resume = null, fresh = false } = {}) {
   const skipPerms = "--dangerously-skip-permissions";
-  if (prompt) return ["-p", prompt, skipPerms];
-  return canContinue ? ["--continue", skipPerms] : [skipPerms];
+  const sessionId = typeof resume === "string" ? ["--resume", resume] : [];
+  if (prompt) return [...sessionId, "-p", prompt, skipPerms];
+  if (resume) return [...(sessionId.length ? sessionId : ["--resume"]), skipPerms];
+  return canContinue && !fresh ? ["--continue", skipPerms] : [skipPerms];
 }
 
 // ---------- availability ----------
