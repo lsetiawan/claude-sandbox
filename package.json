@@ -34,10 +34,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/callobuzz/claude-sandbox.git"
+    "url": "git+https://github.com/lsetiawan/claude-sandbox.git"
   },
-  "homepage": "https://github.com/callobuzz/claude-sandbox#readme",
+  "homepage": "https://github.com/lsetiawan/claude-sandbox#readme",
   "bugs": {
-    "url": "https://github.com/callobuzz/claude-sandbox/issues"
+    "url": "https://github.com/lsetiawan/claude-sandbox/issues"
   }
 }
