@@ -1,196 +1,134 @@
-import { execFileSync, spawnSync } from "node:child_process";
-import { platform, arch } from "node:os";
+import { execFileSync } from "node:child_process";
+import { platform } from "node:os";
+import { checkSbxAvailable, getSbxVersion, isDaemonRunning, listSecrets } from "./sbx.js";
 
 const GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m";
 const RED = "\x1b[31m";
-const CYAN = "\x1b[36m";
 const DIM = "\x1b[2m";
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";
 
 const os = platform();
 
-/**
- * Check if a command exists
- */
 function commandExists(cmd) {
   try {
-    const flag = os === "win32" ? "where" : "which";
-    execFileSync(flag, [cmd], { stdio: "pipe" });
+    execFileSync(os === "win32" ? "where" : "which", [cmd], { stdio: "pipe" });
     return true;
   } catch {
     return false;
   }
 }
 
-/**
- * Get Docker version if installed
- */
-function getDockerVersion() {
-  try {
-    const out = execFileSync("docker", ["version", "--format", "{{.Client.Version}}"], {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return out.trim();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if Docker daemon is running
- */
-function isDockerRunning() {
-  try {
-    execFileSync("docker", ["info"], { stdio: "pipe" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check if docker sandbox plugin is available
- */
-function hasSandboxPlugin() {
-  try {
-    execFileSync("docker", ["sandbox", "version"], { stdio: "pipe" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check if Claude Code CLI is installed on host
- */
 function hasClaudeCli() {
   return commandExists("claude");
 }
 
 /**
- * Platform-specific install instructions
+ * Platform-specific install instructions for the sbx CLI.
+ * Source: https://docs.docker.com/ai/sandboxes/install/
  */
-function getDockerInstallGuide() {
+export function getSbxInstallGuide() {
   switch (os) {
     case "win32":
       return {
         name: "Windows",
         steps: [
-          `${BOLD}Option A: Docker Desktop (recommended)${RESET}`,
-          `  1. Download from: https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe`,
-          `  2. Run the installer`,
-          `  3. Enable WSL 2 backend when prompted`,
-          `  4. Restart your computer`,
-          `  5. Open Docker Desktop and wait for it to start`,
+          `${BOLD}Requirements:${RESET} Windows 11, 64-bit Intel/AMD, Windows Hypervisor Platform enabled`,
           ``,
-          `${BOLD}Option B: Using winget${RESET}`,
-          `  winget install Docker.DockerDesktop`,
+          `${BOLD}1. Enable the Hypervisor Platform (admin PowerShell, then reboot):${RESET}`,
+          `  Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -All`,
           ``,
-          `${BOLD}Option C: Using Chocolatey${RESET}`,
-          `  choco install docker-desktop`,
+          `${BOLD}2. Install sbx (per-user):${RESET}`,
+          `  winget install -h Docker.sbx`,
           ``,
-          `${DIM}Note: Docker Desktop on Windows requires either WSL 2 or Hyper-V.${RESET}`,
-          `${DIM}WSL 2 is recommended. To install WSL: wsl --install${RESET}`,
+          `${DIM}Machine-wide: download DockerSandboxesMachine.msi from the GitHub releases${RESET}`,
+          `${DIM}and run: msiexec.exe /i DockerSandboxesMachine.msi /quiet${RESET}`,
         ],
       };
     case "darwin":
       return {
         name: "macOS",
         steps: [
-          `${BOLD}Option A: Docker Desktop${RESET}`,
-          `  brew install --cask docker`,
-          `  ${DIM}# Then open Docker.app from Applications${RESET}`,
+          `${BOLD}Requirements:${RESET} macOS Sonoma 14 or later, Apple silicon`,
           ``,
-          `${BOLD}Option B: Direct download${RESET}`,
-          arch() === "arm64"
-            ? `  Download from: https://desktop.docker.com/mac/main/arm64/Docker.dmg`
-            : `  Download from: https://desktop.docker.com/mac/main/amd64/Docker.dmg`,
+          `${BOLD}Install with Homebrew:${RESET}`,
+          `  brew trust docker/tap`,
+          `  brew install docker/tap/sbx`,
         ],
       };
     case "linux":
       return {
         name: "Linux",
         steps: [
-          `${BOLD}Option A: Docker Engine (recommended for Linux)${RESET}`,
-          `  curl -fsSL https://get.docker.com | sh`,
-          `  sudo usermod -aG docker $USER`,
-          `  ${DIM}# Log out and back in for group changes to take effect${RESET}`,
+          `${BOLD}Requirements:${RESET} Ubuntu 24.04+, KVM enabled, your user in the kvm group`,
           ``,
-          `${BOLD}Option B: Docker Desktop${RESET}`,
-          `  See: https://docs.docker.com/desktop/install/linux/`,
+          `${BOLD}Option A: sbx only${RESET}`,
+          `  curl -fsSL https://get.docker.com | sudo REPO_ONLY=1 sh`,
+          `  sudo apt install docker-sbx`,
           ``,
-          `${BOLD}After installing Docker, install the sandbox plugin:${RESET}`,
-          `  See: https://docs.docker.com/sandbox/`,
+          `${BOLD}Option B: sbx together with Docker Engine${RESET}`,
+          `  curl -fsSL https://get.docker.com | sudo SBX=1 sh`,
         ],
       };
     default:
       return {
         name: os,
-        steps: [`Visit https://docs.docker.com/get-docker/ for install instructions.`],
+        steps: [`See https://docs.docker.com/ai/sandboxes/install/`],
       };
   }
 }
 
-function getSandboxInstallGuide() {
-  return [
-    `${BOLD}Docker Sandbox plugin is required but not found.${RESET}`,
-    ``,
-    `Docker Sandbox comes with Docker Desktop 4.40+.`,
-    `If you have Docker Desktop, update it to the latest version.`,
-    ``,
-    `More info: https://docs.docker.com/sandbox/`,
-  ];
-}
-
 /**
- * Run full prerequisite check. Returns { ok, issues[] }
+ * Run full prerequisite check. Returns { ok, issues[], checks[], secrets }.
  * If interactive, prints a guided setup flow.
  */
 export function checkPrerequisites({ interactive = true } = {}) {
   const issues = [];
   const checks = [];
+  let secrets = {};
 
-  // 1. Docker installed?
-  const dockerVersion = getDockerVersion();
-  if (dockerVersion) {
-    checks.push({ name: "Docker", status: "ok", detail: `v${dockerVersion}` });
+  // 1. sbx installed?
+  const sbxOk = checkSbxAvailable();
+  if (sbxOk) {
+    checks.push({ name: "Docker Sandboxes (sbx)", status: "ok", detail: getSbxVersion() });
   } else {
-    checks.push({ name: "Docker", status: "missing" });
-    issues.push("docker-missing");
+    checks.push({ name: "Docker Sandboxes (sbx)", status: "missing" });
+    issues.push("sbx-missing");
   }
 
-  // 2. Docker running?
-  if (dockerVersion) {
-    const running = isDockerRunning();
-    if (running) {
-      checks.push({ name: "Docker daemon", status: "ok" });
+  // 2. sandboxd daemon running?
+  if (sbxOk) {
+    if (isDaemonRunning()) {
+      checks.push({ name: "sandboxd daemon", status: "ok" });
     } else {
-      checks.push({ name: "Docker daemon", status: "stopped" });
-      issues.push("docker-stopped");
+      checks.push({ name: "sandboxd daemon", status: "stopped" });
+      issues.push("daemon-stopped");
     }
   }
 
-  // 3. Sandbox plugin?
-  if (dockerVersion && isDockerRunning()) {
-    if (hasSandboxPlugin()) {
-      checks.push({ name: "Docker Sandbox", status: "ok" });
+  // 3. Anthropic credentials stored in sbx? (optional: /login inside Claude also works)
+  if (sbxOk) {
+    secrets = listSecrets();
+    if (secrets.anthropic) {
+      checks.push({ name: "Anthropic auth (sbx secret)", status: "ok", detail: secrets.anthropic.replace(/^\((.*)\)$/, "$1") });
     } else {
-      checks.push({ name: "Docker Sandbox", status: "missing" });
-      issues.push("sandbox-missing");
+      checks.push({
+        name: "Anthropic auth (sbx secret)",
+        status: "optional",
+        detail: "not configured — Claude will ask you to /login once",
+      });
     }
   }
 
-  // 4. Claude CLI on host?
+  // 4. Claude CLI on host? (only needed for the ~/.claude config we share)
   if (hasClaudeCli()) {
-    checks.push({ name: "Claude Code CLI", status: "ok" });
+    checks.push({ name: "Claude Code CLI (host)", status: "ok" });
   } else {
     checks.push({
-      name: "Claude Code CLI",
+      name: "Claude Code CLI (host)",
       status: "optional",
-      detail: "not found (not required, but credentials may be missing)",
+      detail: "not found (optional; only used to share your ~/.claude config)",
     });
   }
 
@@ -211,36 +149,28 @@ export function checkPrerequisites({ interactive = true } = {}) {
     }
     console.log();
 
-    // Print guides for issues
-    if (issues.includes("docker-missing")) {
-      const guide = getDockerInstallGuide();
-      console.log(`${RED}Docker is not installed.${RESET} Install it for ${guide.name}:\n`);
-      for (const step of guide.steps) {
-        console.log(`  ${step}`);
-      }
+    if (issues.includes("sbx-missing")) {
+      const guide = getSbxInstallGuide();
+      console.log(`${RED}The sbx CLI is not installed.${RESET} Install it for ${guide.name}:\n`);
+      for (const step of guide.steps) console.log(`  ${step}`);
+      console.log();
+      console.log(`  ${DIM}Docker Desktop / Docker Engine are NOT required.${RESET}`);
+      console.log(`  ${DIM}Docs: https://docs.docker.com/ai/sandboxes/install/${RESET}`);
       console.log();
     }
 
-    if (issues.includes("docker-stopped")) {
-      console.log(`${YELLOW}Docker is installed but not running.${RESET}\n`);
-      if (os === "win32") {
-        console.log(`  Start Docker Desktop from the Start menu, or run:`);
-        console.log(`  start "" "Docker Desktop"`);
-      } else if (os === "darwin") {
-        console.log(`  Open Docker.app, or run:`);
-        console.log(`  open -a Docker`);
-      } else {
-        console.log(`  Start the Docker service:`);
-        console.log(`  sudo systemctl start docker`);
-      }
+    if (issues.includes("daemon-stopped")) {
+      console.log(`${YELLOW}sbx is installed but its daemon is not running.${RESET}\n`);
+      console.log(`  sbx daemon start`);
+      console.log(`  ${DIM}# or run 'sbx diagnose' to find out what is wrong${RESET}`);
       console.log();
     }
 
-    if (issues.includes("sandbox-missing")) {
-      const guide = getSandboxInstallGuide();
-      for (const line of guide) {
-        console.log(`  ${line}`);
-      }
+    if (sbxOk && !secrets.anthropic) {
+      console.log(`${YELLOW}No Anthropic credentials stored in sbx.${RESET}`);
+      console.log(`  Either run ${BOLD}/login${RESET} once inside Claude (sbx keeps the OAuth token`);
+      console.log(`  on the host and shares it with every sandbox), or store an API key:`);
+      console.log(`  sbx secret set anthropic`);
       console.log();
     }
 
@@ -250,5 +180,5 @@ export function checkPrerequisites({ interactive = true } = {}) {
     }
   }
 
-  return { ok: issues.length === 0, issues, checks };
+  return { ok: issues.length === 0, issues, checks, secrets };
 }

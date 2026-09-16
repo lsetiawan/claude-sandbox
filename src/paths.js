@@ -3,81 +3,51 @@ import { join, resolve, basename } from "node:path";
 import { existsSync } from "node:fs";
 
 /**
- * Detect if running in MSYS/Git Bash on Windows
- */
-export function isMsys() {
-  return (
-    process.platform === "win32" ||
-    process.env.OSTYPE === "msys" ||
-    process.env.MSYSTEM != null
-  );
-}
-
-/**
  * Get the host ~/.claude directory path
  */
 export function getClaudeHome() {
-  const home = homedir();
-  const claudeDir = join(home, ".claude");
-  if (existsSync(claudeDir)) return claudeDir;
-  return null;
+  const claudeDir = join(homedir(), ".claude");
+  return existsSync(claudeDir) ? claudeDir : null;
 }
 
 /**
- * Get the credentials file path
- */
-export function getCredentialsPath() {
-  const claudeHome = getClaudeHome();
-  if (!claudeHome) return null;
-  const creds = join(claudeHome, ".credentials.json");
-  if (existsSync(creds)) return creds;
-  return null;
-}
-
-/**
- * Get ~/.claude.json path (lives at HOME root, not inside .claude/)
- * This file stores startup config, theme, tips — without it Claude shows first-time setup
+ * Get ~/.claude.json path (lives at HOME root, not inside .claude/).
+ * Stores startup config, theme, onboarding state — without it Claude shows first-time setup.
  */
 export function getClaudeJsonPath() {
-  const home = homedir();
-  const p = join(home, ".claude.json");
-  if (existsSync(p)) return p;
-  return null;
+  const p = join(homedir(), ".claude.json");
+  return existsSync(p) ? p : null;
 }
 
 /**
- * Convert a path to Windows format for docker sandbox commands.
- * On Windows, docker sandbox expects native Windows paths (J:\foo\bar).
- * Node's path.resolve already returns Windows paths on Windows.
+ * Absolute host path as passed to `sbx create`.
  */
-export function toDockerPath(p) {
+export function toHostPath(p) {
   return resolve(p);
 }
 
 /**
- * Convert a Windows path to what it looks like inside the sandbox mount.
- * Docker sandbox mounts Windows paths like:
- *   C:\Users\SV\.claude -> /c/Users/SV/.claude
- *   J:\callobuzz\project -> /j/callobuzz/project
+ * sbx mounts a workspace "at the same path as on the host". On macOS/Linux
+ * that is literally the same string. On Windows the drive letter has to be
+ * mapped somehow, so we return several candidates and let the caller probe
+ * which one exists inside the sandbox.
  */
-export function toSandboxMountPath(windowsPath) {
-  if (process.platform !== "win32") return windowsPath;
-  // C:\Users\SV\.claude -> /c/Users/SV/.claude
-  return windowsPath
-    .replace(/^([A-Z]):\\/, (_, drive) => `/${drive.toLowerCase()}/`)
-    .replace(/\\/g, "/");
+export function toSandboxMountCandidates(hostPath) {
+  const m = hostPath.match(/^([A-Za-z]):\\(.*)$/);
+  if (!m) return [hostPath];
+  const drive = m[1].toLowerCase();
+  const rest = m[2].replace(/\\/g, "/");
+  return [hostPath, `/${drive}/${rest}`, `/mnt/${drive}/${rest}`, `/${m[1]}/${rest}`];
 }
 
-/**
- * Get project name from path
- */
 export function getProjectName(projectDir) {
   return basename(resolve(projectDir));
 }
 
 /**
- * Generate sandbox name from project name
+ * Sandbox name. sbx allows letters, numbers, hyphens and periods only.
  */
 export function getSandboxName(projectDir) {
-  return `claude-sandbox-${getProjectName(projectDir)}`;
+  const safe = getProjectName(projectDir).replace(/[^A-Za-z0-9.-]+/g, "-");
+  return `claude-sandbox-${safe}`;
 }

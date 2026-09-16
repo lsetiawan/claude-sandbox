@@ -1,7 +1,7 @@
 {
   "name": "claude-sandbox",
-  "version": "0.2.0",
-  "description": "Run Claude Code in Docker sandboxes with zero re-authentication. Mounts your existing credentials, skills, and plugins automatically.",
+  "version": "0.3.0",
+  "description": "Run Claude Code in Docker Sandboxes (sbx) with your host settings, plugins, skills and agents shared automatically.",
   "type": "module",
   "bin": {
     "claude-sandbox": "./src/cli.js"
@@ -11,13 +11,15 @@
   ],
   "scripts": {
     "start": "node src/cli.js",
-    "test": "node src/cli.js status"
+    "test": "node --test \"test/*.test.js\""
   },
   "keywords": [
     "claude",
     "claude-code",
     "docker",
     "sandbox",
+    "sbx",
+    "docker-sandboxes",
     "ai",
     "agent",
     "autonomous",

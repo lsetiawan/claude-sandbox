@@ -2,9 +2,9 @@
 
 # claude-sandbox
 
-**Run Claude Code in isolated Docker sandboxes with zero re-authentication.**
+**Run Claude Code in isolated Docker Sandboxes (`sbx`) with your host config shared automatically.**
 
-One command. Any project. Your existing credentials, skills, and plugins — automatically.
+One command. Any project. Your existing settings, skills, plugins and agents — no setup wizard, no re-login.
 
 [![npm version](https://img.shields.io/npm/v/claude-sandbox.svg)](https://www.npmjs.com/package/claude-sandbox)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -18,7 +18,10 @@ One command. Any project. Your existing credentials, skills, and plugins — aut
 ## Quick Start
 
 ```bash
-# Install globally
+# Install the sbx CLI (macOS shown; see Setup for Windows/Linux)
+brew trust docker/tap && brew install docker/tap/sbx
+
+# Install claude-sandbox
 npm install -g claude-sandbox
 
 # Open any project and run
@@ -26,18 +29,19 @@ cd your-project
 claude-sandbox
 ```
 
-That's it. Claude opens in a sandboxed microVM with your auth, settings, and skills — no browser login.
+That's it. Claude opens in a sandboxed microVM with your settings, plugins, skills and agents. Log in once (`/login` inside Claude) and `sbx` remembers it for every sandbox.
 
 ---
 
 ## Why claude-sandbox?
 
-- **Re-authentication hell** — Every new `docker sandbox` instance requires a fresh browser login. Even with a Claude Max subscription, you re-auth every single time.
-- **Manual setup** — `docker sandbox` only works from the directory you run it in. No easy way to point it at arbitrary projects.
-- **No config sharing** — Your skills, plugins, settings, and CLAUDE.md don't carry over. Every sandbox is a blank slate.
-- **First-time setup wizard** — Each new sandbox shows theme picker and onboarding flow, even though you've used Claude 164 times.
+Docker Sandboxes (`sbx`) already gives you a microVM per project and keeps your Anthropic token out of the VM. What it deliberately does **not** do is pick up your user-level Claude config:
 
-`claude-sandbox` solves all of this. One command, zero friction, full isolation.
+- **Blank-slate config** — `~/.claude` (settings, permissions, plugins, agents, commands, `CLAUDE.md`) is not shared. Every sandbox is a fresh install.
+- **First-time setup wizard** — Without `~/.claude.json` each sandbox shows the theme picker and onboarding flow.
+- **Manual naming and resuming** — You have to remember `sbx run --name …` per project.
+
+`claude-sandbox` layers the missing ergonomics on top of `sbx`: one command, your config, auto-resume.
 
 ---
 
@@ -45,15 +49,15 @@ That's it. Claude opens in a sandboxed microVM with your auth, settings, and ski
 
 | Feature | Description |
 |---------|-------------|
-| **Zero re-auth** | Mounts your host `~/.claude` credentials read-only. No browser login ever. |
+| **Config sharing** | Host `~/.claude` mounted read-only; settings, plugins, agents, commands, `CLAUDE.md` linked into the sandbox. |
+| **Skills** | Host `~/.claude/skills` linked if present, otherwise sbx's shared skills store is used. |
+| **No setup wizard** | `~/.claude.json` copied in so Claude starts with your theme and onboarding done. |
+| **Zero re-auth** | `sbx` stores your Anthropic OAuth token (or API key) on the host and injects it via its proxy. Log in once, use everywhere. |
 | **Any directory** | Point it at any project folder. Sandbox is named by directory and reused automatically. |
-| **Config sharing** | Your settings, skills, plugins, agents, and CLAUDE.md are available inside the sandbox. |
-| **Writable workspace** | Claude can run commands, write files, create sessions — sandbox has its own writable space. |
-| **Auto-resume** | Run `claude-sandbox` again in the same directory — it detects the existing sandbox and resumes. |
-| **Host network access** | Reach your local dev servers, databases, and Docker containers via `host.docker.internal`. |
-| **Docker socket** | Claude can interact with your running Docker containers from inside the sandbox. |
-| **Smart prerequisites** | Missing Docker? Platform-specific install guide shown automatically. |
-| **No dependencies** | Pure Node.js. Zero npm dependencies. |
+| **Auto-resume** | Run `claude-sandbox` again in the same directory and it re-attaches with `--continue`. |
+| **Writable workspace** | The project is mounted read-write at the same absolute path as on the host. |
+| **Smart prerequisites** | Missing `sbx`? Platform-specific install guide shown automatically. |
+| **No dependencies** | Pure Node.js. Zero npm dependencies. No Docker Desktop required. |
 
 ---
 
@@ -64,14 +68,15 @@ That's it. Claude opens in a sandboxed microVM with your auth, settings, and ski
 ```bash
 claude-sandbox                              # current directory, interactive
 claude-sandbox /path/to/project             # any project directory
-claude-sandbox . -p "analyze this codebase" # with an initial prompt
+claude-sandbox . -p "analyze this codebase" # with a prompt (print mode)
 claude-sandbox -n my-custom-name            # custom sandbox name
+claude-sandbox --no-config                  # don't share host ~/.claude
 ```
 
 ### Managing sandboxes
 
 ```bash
-claude-sandbox list                         # list all sandboxes
+claude-sandbox list                         # list all sandboxes (sbx ls)
 claude-sandbox resume claude-sandbox-myapp  # resume a specific sandbox
 claude-sandbox stop claude-sandbox-myapp    # stop a sandbox
 claude-sandbox rm claude-sandbox-myapp      # remove a sandbox permanently
@@ -80,7 +85,7 @@ claude-sandbox rm claude-sandbox-myapp      # remove a sandbox permanently
 ### Diagnostics
 
 ```bash
-claude-sandbox status                       # check Docker, sandbox plugin, credentials
+claude-sandbox status                       # check sbx, daemon, auth, host config
 claude-sandbox --help                       # full usage info
 ```
 
@@ -94,23 +99,18 @@ claude-sandbox --help                       # full usage info
 $ cd my-api
 $ claude-sandbox
 
-[claude-sandbox] Project:  C:\Projects\my-api
+[claude-sandbox] Project:  /Users/you/Projects/my-api
 [claude-sandbox] Sandbox:  claude-sandbox-my-api
-[claude-sandbox] Auth:     max (default_claude_max_20x)
 
 [claude-sandbox] [1/4] Creating sandbox microVM...
-✓ Created sandbox claude-sandbox-my-api in VM claude-sandbox-my-api
+── CREATE SANDBOX
+   ✓ Created sandbox claude-sandbox-my-api
 [claude-sandbox] [1/4] Sandbox created.
-[claude-sandbox] [2/4] Linking credentials, settings, skills, plugins...
-[claude-sandbox] [2/4] Auth configured. No browser login needed.
+[claude-sandbox] [2/4] Linking settings, plugins, skills, agents...
+[claude-sandbox] [2/4] Linked: settings.json, plugins, agents + ~/.claude.json
 [claude-sandbox] [3/4] Verifying sandbox state...
-[claude-sandbox] [3/4] All checks passed: credentials, config, settings, writable dirs.
+[claude-sandbox] [3/4] All checks passed: claude.json, settings, writable dirs, claude CLI.
 [claude-sandbox] [4/4] Launching Claude...
-
-╭─── Claude Code ─────────────────────────────────╮
-│          Welcome back!                          │
-│   Opus 4.6 (1M context) · Claude Max           │
-╰─────────────────────────────────────────────────╯
 ```
 
 ### Second run (auto-resume)
@@ -118,9 +118,9 @@ $ claude-sandbox
 ```
 $ claude-sandbox
 
-[claude-sandbox] Project:  C:\Projects\my-api
+[claude-sandbox] Project:  /Users/you/Projects/my-api
 [claude-sandbox] Sandbox:  claude-sandbox-my-api
-[claude-sandbox] Sandbox exists. Resuming...
+[claude-sandbox] Sandbox exists (stopped). Resuming...
 ```
 
 ### Status check
@@ -130,16 +130,15 @@ $ claude-sandbox status
 
 Prerequisite Check
 
-  ✓ Docker (v29.2.1)
-  ✓ Docker daemon
-  ✓ Docker Sandbox
-  ✓ Claude Code CLI
+  ✓ Docker Sandboxes (sbx) (v0.43.0)
+  ✓ sandboxd daemon
+  ✓ Anthropic auth (sbx secret) (oauth configured)
+  ✓ Claude Code CLI (host)
 
 All prerequisites met. Ready to go.
 
-  Credentials:     found
-  Subscription:    max (default_claude_max_20x)
-  Claude home:     C:\Users\you\.claude
+  Claude home:     /Users/you/.claude
+  Host skills:     none (sbx skills store used)
 ```
 
 ---
@@ -147,38 +146,42 @@ All prerequisites met. Ready to go.
 ## How It Works
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Your Host Machine                                      │
-│                                                         │
-│  ~/.claude/                    Project Directory         │
-│  ├── .credentials.json ──────┐  /path/to/project ──┐   │
-│  ├── settings.json ──────────┤                      │   │
-│  ├── skills/ ────────────────┤                      │   │
-│  ├── plugins/ ───────────────┤                      │   │
-│  └── CLAUDE.md ──────────────┤                      │   │
-│                               │                      │   │
-│  ┌────────────────────────────┼──────────────────────┼─┐│
-│  │  Docker Sandbox (microVM)  │                      │ ││
-│  │                            ▼                      ▼ ││
-│  │  /home/agent/.claude/    /j/path/to/project/       ││
-│  │  ├── .credentials.json → symlink (read-only)       ││
-│  │  ├── settings.json ────→ symlink (read-only)       ││
-│  │  ├── skills/ ──────────→ symlink (read-only)       ││
-│  │  ├── session-env/ ─────→ writable (sandbox-local)  ││
-│  │  ├── sessions/ ────────→ writable (sandbox-local)  ││
-│  │  └── history.jsonl ────→ writable (sandbox-local)  ││
-│  │                                                     ││
-│  │  Claude Code runs here with full permissions        ││
-│  │  --dangerously-skip-permissions (safe in sandbox)   ││
-│  └─────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Your Host Machine                                           │
+│                                                              │
+│  ~/.claude/                     /path/to/project             │
+│  ├── settings.json ───────┐        │                         │
+│  ├── plugins/ ────────────┤        │   sbx proxy             │
+│  ├── agents/ ─────────────┤        │   (Anthropic token      │
+│  ├── commands/ ───────────┤        │    stays on the host)   │
+│  └── CLAUDE.md ───────────┤        │        ▲                │
+│  ~/.claude.json ──(copy)──┤        │        │                │
+│                           │        │        │                │
+│  ┌────────────────────────┼────────┼────────┼──────────────┐ │
+│  │  Docker Sandbox (microVM)       ▼        │              │ │
+│  │                        ▼  /path/to/project (rw)         │ │
+│  │  /home/agent/.claude/                                   │ │
+│  │  ├── settings.json ──→ symlink to host mount (ro)       │ │
+│  │  ├── plugins/ ───────→ symlink to host mount (ro)       │ │
+│  │  ├── skills/ ────────→ sbx skills store, or host (ro)   │ │
+│  │  ├── sessions/ ──────→ writable (sandbox-local)         │ │
+│  │  └── history.jsonl ──→ writable (sandbox-local)         │ │
+│  │  /home/agent/.claude.json (copied from host)            │ │
+│  │                                                         │ │
+│  │  claude --dangerously-skip-permissions                  │ │
+│  └─────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**Read-only from host** (symlinked): credentials, settings, skills, plugins, agents, CLAUDE.md
+1. `sbx create --name claude-sandbox-<dir> claude <project> ~/.claude:ro`
+2. Inside the sandbox, selected items from the read-only `~/.claude` mount are symlinked into the sandbox's own writable `~/.claude`, and `~/.claude.json` is copied in.
+3. `sbx run --name claude-sandbox-<dir> -- --dangerously-skip-permissions`
 
-**Writable in sandbox** (local): session-env, sessions, history, cache, backups, file-history, tasks
+**Read-only from host** (symlinked): settings, plugins, agents, commands, CLAUDE.md, skills (if present)
 
-**Project directory**: mounted read-write inside the sandbox
+**Writable in sandbox** (local): sessions, history, session-env, cache, backups, file-history, tasks, projects
+
+**Project directory**: mounted read-write at the same absolute path as on the host
 
 ---
 
@@ -188,13 +191,36 @@ Configuration is automatic. `claude-sandbox` detects your existing Claude Code s
 
 | Item | Source | Access | Notes |
 |------|--------|--------|-------|
-| Credentials | `~/.claude/.credentials.json` | Read-only | OAuth token from your subscription |
-| Settings | `~/.claude/settings.json` | Read-only | Permissions, deny rules |
-| Skills | `~/.claude/skills/` | Read-only | Custom skills |
+| Settings | `~/.claude/settings.json` | Read-only | Permissions, deny rules, hooks |
 | Plugins | `~/.claude/plugins/` | Read-only | Installed plugins |
 | Agents | `~/.claude/agents/` | Read-only | Custom agents |
+| Commands | `~/.claude/commands/` | Read-only | Custom slash commands |
+| Skills | `~/.claude/skills/` | Read-only | Linked if present; otherwise sbx's `sbx skills` store is mounted |
 | CLAUDE.md | `~/.claude/CLAUDE.md` | Read-only | Global instructions |
 | Startup config | `~/.claude.json` | Copied | Prevents first-time setup wizard |
+| Credentials | `sbx secret` store | Host-side proxy | Never enters the VM. See Authentication. |
+
+Pass `--no-config` to skip all of the above and start from a clean Claude config.
+
+---
+
+## Authentication
+
+`sbx` owns authentication. Your Anthropic token is stored on the host and injected by the sbx proxy into requests to `api.anthropic.com`; it never enters the sandbox filesystem. Two ways to set it up, both one-time:
+
+```bash
+# Option A: Claude subscription (Max/Pro) — run /login inside Claude once.
+#           sbx captures the OAuth flow and stores it globally.
+claude-sandbox
+> /login
+
+# Option B: API key
+sbx secret set anthropic
+```
+
+`claude-sandbox status` shows whether an Anthropic secret is configured (`sbx secret ls`).
+
+> Older versions of this tool symlinked `~/.claude/.credentials.json` into the sandbox. That is no longer done: sbx handles it more safely, and on macOS the token lives in the Keychain, not in a file.
 
 ---
 
@@ -202,167 +228,124 @@ Configuration is automatic. `claude-sandbox` detects your existing Claude Code s
 
 ### What's isolated
 
-- **Filesystem** — Sandbox cannot access host files outside the mounted project directory
-- **Credentials** — Host `~/.claude` is mounted read-only. Sandbox cannot modify your auth tokens.
+- **Filesystem** — Sandbox cannot access host files outside the mounted project directory and the read-only `~/.claude`.
+- **Credentials** — Anthropic token stays on the host; the sandbox only sees a proxy-managed placeholder.
 - **Destructive commands** — `rm -rf /` only affects the sandbox. Host is untouched.
 - **Disposable** — `claude-sandbox rm` wipes everything clean.
 
 ### What's accessible
 
-- **Internet** — Full access (required for Anthropic API, package registries, etc.)
-- **Host machine** — Reachable via `host.docker.internal` (hit your local dev servers, databases)
-- **Docker socket** — Available inside sandbox (interact with running containers)
-- **Project files** — Read-write access to the mounted project directory
+- **Internet** — Via the sbx egress proxy (required for the Anthropic API, package registries, etc.). Network policies can be set with `sbx policy`.
+- **Project files** — Read-write access to the mounted project directory.
 
 ---
 
 ## Setup & Prerequisites
 
-`claude-sandbox` checks prerequisites on every run. If something is missing, it shows platform-specific install instructions automatically. But here's the full setup if you want to do it manually.
+`claude-sandbox` checks prerequisites on every run. If something is missing, it shows platform-specific install instructions automatically.
 
 ### Requirements
 
-| Requirement | Version | Required? | Notes |
-|-------------|---------|-----------|-------|
-| Node.js | >= 18 | Yes | For the CLI (`npm install -g claude-sandbox`) |
-| Docker Desktop | >= 4.40 | Yes | Provides Docker Engine + Docker Sandbox |
-| Docker Sandbox | >= 0.12 | Yes | Built into Docker Desktop 4.40+. This is the `docker sandbox` command. |
-| Claude Code CLI | Any | Yes | Must be installed and authenticated on your host machine |
+| Requirement | Required? | Notes |
+|-------------|-----------|-------|
+| Node.js >= 18 | Yes | For the CLI (`npm install -g claude-sandbox`) |
+| Docker Sandboxes CLI (`sbx`) | Yes | Standalone binary. **Docker Desktop / Docker Engine are not required.** |
+| Claude Code CLI on host | No | Only needed so there is a `~/.claude` to share |
 
-### Step-by-step setup
+### 1. Install the sbx CLI
 
-#### 1. Install Node.js (if not installed)
+Full guide: https://docs.docker.com/ai/sandboxes/install/
 
 ```bash
-# Windows (winget)
-winget install OpenJS.NodeJS.LTS
+# macOS (Sonoma 14+, Apple silicon)
+brew trust docker/tap
+brew install docker/tap/sbx
 
-# macOS (Homebrew)
-brew install node
+# Windows 11 (enable Hypervisor Platform first, in an admin PowerShell, then reboot)
+Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -All
+winget install -h Docker.sbx
 
-# Linux
-curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-sudo apt-get install -y nodejs
+# Linux (Ubuntu 24.04+, KVM enabled, user in the kvm group)
+curl -fsSL https://get.docker.com | sudo REPO_ONLY=1 sh
+sudo apt install docker-sbx
 ```
 
-Verify: `node --version` should print `v18.x` or higher.
+Verify: `sbx version` prints a version and `sbx diagnose` is all green.
 
-#### 2. Install Docker Desktop
-
-Docker Desktop includes both Docker Engine and the Docker Sandbox plugin.
+### 2. (Optional) Install Claude Code on the host
 
 ```bash
-# Windows (winget)
-winget install Docker.DockerDesktop
-# Then restart your computer. WSL 2 is required — install with: wsl --install
-
-# macOS (Homebrew)
-brew install --cask docker
-# Then open Docker.app from Applications
-
-# Linux
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-# Log out and back in, then install Docker Desktop for the Sandbox plugin
-# See: https://docs.docker.com/desktop/install/linux/
-```
-
-Verify: `docker version` should show Client and Server versions. `docker sandbox version` should print a version number.
-
-#### 3. Install and authenticate Claude Code
-
-```bash
-# Install Claude Code CLI
 npm install -g @anthropic-ai/claude-code
-
-# Authenticate (opens browser for OAuth login)
-claude
-
-# This creates ~/.claude/.credentials.json which claude-sandbox will use
+claude   # creates ~/.claude and ~/.claude.json
 ```
 
-Verify: `claude --version` should print a version. Running `claude` should open the interactive session without asking for login.
+Without this, sandboxes still work; they just start with a default Claude config.
 
-#### 4. Install claude-sandbox
+### 3. Install claude-sandbox
 
 ```bash
 npm install -g claude-sandbox
-
-# Verify everything
 claude-sandbox status
 ```
 
-You should see all green checkmarks:
-
-```
-Prerequisite Check
-
-  ✓ Docker (v29.x)
-  ✓ Docker daemon
-  ✓ Docker Sandbox
-  ✓ Claude Code CLI
-
-All prerequisites met. Ready to go.
-
-  Credentials:     found
-  Subscription:    max (default_claude_max_20x)
-  Claude home:     C:\Users\you\.claude
-```
-
-#### 5. Run it
+### 4. Run it
 
 ```bash
 cd your-project
 claude-sandbox
 ```
 
+On the very first sandbox, run `/login` inside Claude (or `sbx secret set anthropic` beforehand). sbx keeps that credential for all future sandboxes.
+
 ### Troubleshooting
 
-**`docker sandbox` command not found**
-- Update Docker Desktop to 4.40 or later. Docker Sandbox is a built-in plugin.
+**`sbx` command not found**
+- Install it as above. If you previously used the `docker sandbox` plugin: `sbx` replaces it and does not need Docker.
 
-**Claude asks for browser login inside sandbox**
-- Your host credentials may have expired. Run `claude` on your host to refresh, then restart the sandbox.
+**"sandboxd daemon" reported stopped**
+- Run `sbx daemon start`, or `sbx diagnose` for details.
 
-**"Failed to create sandbox" error**
-- Make sure Docker Desktop is running (check system tray / menu bar).
-- On Windows, ensure WSL 2 is installed: `wsl --install`
+**Claude asks for browser login inside the sandbox**
+- Expected on the first sandbox ever. Complete `/login` once; sbx stores it. Check with `sbx secret ls`.
 
 **Sandbox is slow to create the first time**
-- First run downloads the sandbox template image (~500MB). Subsequent runs reuse the cached image and are fast.
+- First run pulls the `docker/sandbox-templates:claude-code-docker` image. Subsequent runs reuse it.
+
+**Host skills not showing up**
+- If `~/.claude/skills` exists, it is linked in place of the sbx skills store at creation time. Existing sandboxes keep whatever they were created with; `claude-sandbox rm` and re-run to change it. Alternatively use `sbx skills import` to put host skills into the shared store.
 
 ### Platform support
 
-| Platform | Docker Install |
-|----------|---------------|
-| Windows | Docker Desktop (WSL 2 backend) |
-| macOS | Docker Desktop (`brew install --cask docker`) |
-| Linux | Docker Engine (`curl -fsSL https://get.docker.com \| sh`) + Docker Desktop for Sandbox |
+| Platform | sbx install |
+|----------|-------------|
+| macOS | `brew install docker/tap/sbx` (Sonoma 14+, Apple silicon) |
+| Windows | `winget install -h Docker.sbx` (Windows 11, Hypervisor Platform) |
+| Linux | `apt install docker-sbx` (Ubuntu 24.04+, KVM) |
 
 ---
 
 ## FAQ
 
 **Q: Does this use my Claude subscription?**
-Yes. It mounts your existing credentials read-only. Your Claude Max/Pro subscription is used.
+Yes, once you `/login` inside a sandbox sbx stores the OAuth token on the host and reuses it for every sandbox.
 
 **Q: Can the sandbox modify my host files?**
-Only files inside the mounted project directory. Your `~/.claude` config is read-only. Everything outside the project is inaccessible.
+Only files inside the mounted project directory. Your `~/.claude` is mounted read-only. Everything else is inaccessible.
 
 **Q: What happens when I close the terminal?**
 The sandbox stops but persists. Run `claude-sandbox` again in the same directory and it auto-resumes.
 
 **Q: Can I run multiple sandboxes?**
-Yes. Each project directory gets its own sandbox (`claude-sandbox-<dirname>`). Run as many as you want.
+Yes. Each project directory gets its own sandbox (`claude-sandbox-<dirname>`).
 
 **Q: Why `--dangerously-skip-permissions`?**
-Inside the sandbox, there's nothing dangerous to skip — the sandbox IS the permission boundary. This lets Claude work without constant permission prompts.
+Inside the sandbox the VM is the permission boundary. `sbx run claude` uses this flag by default; we pass it explicitly.
 
 **Q: Does this make network calls?**
-The `claude-sandbox` CLI itself makes zero network calls. It only runs local `docker` commands and reads local files. Claude inside the sandbox connects to Anthropic's API.
+The `claude-sandbox` CLI itself makes zero network calls. It only runs local `sbx` commands and reads local files.
 
-**Q: My token expired. What do I do?**
-Run `claude` on your host machine (outside the sandbox) to refresh your token. Then restart the sandbox — it reads the latest credentials from your host.
+**Q: I used an older version with `docker sandbox`. What changed?**
+Docker renamed the sandbox plugin to a standalone `sbx` CLI. Commands map 1:1 (`sbx create`, `sbx run --name`, `sbx ls`, `sbx rm --force`), credentials are handled by sbx instead of a mounted `.credentials.json`, and Docker Desktop is no longer needed. `--no-auth` still works as an alias for `--no-config`.
 
 ---
 
@@ -371,8 +354,9 @@ Run `claude` on your host machine (outside the sandbox) to refresh your token. T
 ```bash
 git clone https://github.com/callobuzz/claude-sandbox.git
 cd claude-sandbox
-npm link        # install globally for development
-claude-sandbox status  # verify it works
+npm test               # unit tests (node --test)
+npm link               # install globally for development
+claude-sandbox status  # verify it works against your sbx install
 ```
 
 ---
