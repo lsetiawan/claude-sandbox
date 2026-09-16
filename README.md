@@ -352,7 +352,7 @@ Docker renamed the sandbox plugin to a standalone `sbx` CLI. Commands map 1:1 (`
 ## Contributing
 
 ```bash
-git clone https://github.com/callobuzz/claude-sandbox.git
+git clone https://github.com/lsetiawan/claude-sandbox.git
 cd claude-sandbox
 npm test               # unit tests (node --test)
 npm link               # install globally for development
